@@ -1,0 +1,29 @@
+
+p42svn is a Perl script to migrate revision history from a Perforce depot to a
+Subversion repository.
+
+Ray Miller, the original author of p42svn does not have time to maintain the project
+anymore. It was moved to tigris.org where it was managed by Dimitri
+Papadopoulos-Orfanos until 2013 when Trent Fisher took over.  The project was
+moved to GitHub in 2020 after tigris.org vanished (which means all history was lost).
+
+
+Requirements
+
+Perl
+ Since p42svn is a Perl script, it needs Perl to run. On Linux and many recent Unix
+ releases, Perl is already installed. 
+Perforce Perl API
+ The Perforce Perl API (P4Perl) is usually not distributed with Perl and needs to
+ be installed separately. Download and follow the instructions in the release
+ notes. 
+Perforce C/C++ API
+ In order to build the Perforce Perl API, you will also need the Perforce C/C++ API
+ (P4API). 
+
+Documentation
+
+There is a migration guide in the www directory, and the two programs
+p42svn and p42svnsync have pod documentation which can be seen via
+perldoc or pod2html.
+
