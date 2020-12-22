@@ -1,0 +1,270 @@
+Version 0.31 2013-01-??  Trent Fisher <trentf@tigris.org>
+
+	* Fixed the ETA calculations for incremental imports
+
+	* Added more documentation on labels.
+
+	* Fixed the handling of labels on move/delete and purge files
+	I don't know how this can happen yet, so I could use a hand
+	building a test case.
+
+Version 0.30 2013-01-11  Trent Fisher <trentf@tigris.org>
+
+	* Added makefiles to automate several tasks, including installation
+	Though, it has only been tested on Linux.  YMMV.
+
+	* p42svnsync: A utility to do continuous synchronization between
+	a Perforce depot and Subversion, much like svnsync.
+	This depends on many new features listed below.
+
+	* Labels: added support for migrating labels via the --label option.
+	Initially derived from a patch from Sheridan Rawlins
+
+	* Added options --existing-files and --existing-revs
+	to fix issues with incremental imports.
+
+	* Added code to deal with Windows servers which are case-inconsistent.
+	See the --fix-case option
+
+	* Added an option to save the Perforce change numbers in SVN.
+	See the --save-changenum option.
+
+	* Added code to deal with non utf8 filenames.
+	See the --rawcharset option.
+
+	* Added option to make p42svn stop gracefully after processing
+	the current changeset/revision. See the --stopfile option.
+
+	* Added an option to skip over versions which are corrupted in
+	Perforce.  See the --skipcorrupt option.
+
+	* Added an option to make fatal errors drop the error into the dump
+	stream, which should cause svnadmin load to fail, rather than
+	commit an incomplete revision.  Useful when piping directly
+	into svnadmin load. See the --nopartialrev option.
+
+	* Added a rudimentary --verify option (right now it just verifies
+	that each p4 rev has a matching one in subversion.
+
+	* Modified the P4 connection code to keep the connection to the
+	server open.  This can speed up conversions significantly.
+	Patch supplied by Rajesh (full name not given).
+
+	* Added an code to cache file contents locally in an attempt to speed
+	up repeated import attempts. See the --contentcache option.
+
+	* Reworked routine for fetching file contents to avoid using fork
+	and sending the entire file contents on the stack, which will exhaust
+	memory for very large files.  This may also make it easier to run on
+	Windows, but I've made no attempt to test this.
+
+	* Added code to deal with the types of "files" changing,
+	symlink to file, etc.
+
+	* Added a rudimentary test suite.
+
+	* Add support for move/delete and move/add actions.
+	From a patch by Alex Java
+
+	* Fixed the purge action to do something reasonable.
+
+	* Modified code to deal with very old versions Perforce.
+
+	* Added better progress indicators with -v option.
+
+Version 0.21 2009-05-01  Dimitri Papadopoulos-Orfanos  <dpo@tigris.org>
+
+	* Update documentation.
+
+	* By default do not convert Perforce keywords.
+
+	* Avoid warning: do not pass uninitialized variables to debug().
+
+	* Initial support for Perforce purge action. Not tested!
+
+	* Avoid calculating MD5 and properties in svn_add_copy() and
+	  svn_replace_copy(). This speeds up conversion.
+
+	* Merge code from:
+	  svn_add_symlink() and svn_add_file()
+	  svn_edit_symlink() and svn_edit_symlink()
+
+	* Fix is_in_range() to properly test against ranges of changelists
+	  specified arguments by option '--changes'.
+
+	* Properly handle changes falling outside of changes specified
+	  by option '--changes' in p4_file2svnrev().
+
+	* Consistent error messages.
+
+	* Depending on the version of Perforce, Run('diff2') might return
+	  an ARRAY or a HASH. Apply strict tests to the return value.
+	  This fixes p4_files_are_identical() which was totally broken
+	  under recent versions of Perforce.
+	  It looks like very old versions of Perforce might return a SCALAR
+	  but this will not be supported anymore.
+
+	* Comply with the Filesystem Hierarchy Standard (FHS) 2.3 which
+	  seems to expect a "magic.mime" file in "/usr/share/file".
+
+	* Add the '-s' option to Run('describe', ...) to exclude the diffs
+	  and speed up transfer.
+
+	* Get rid of "pseudo hashes" deprecated as of Perl 5.8.0.
+
+	* Perforce P4Perl is significantly different from the P4Perl on
+	  Tony Smith's page. Detect the version of P4Perl and adapt to
+	  the API of either version:
+	     ParseForms() ->
+	     Changes(...) -> Run('changes', ...)
+	    Describe(...) -> Run('describe', ...)
+	       Print(...) -> Run('print', ...)
+	       Diff2(...) -> Run('diff2', ...)
+	     Filelog(...) -> Run('filelog', ...)
+
+	* Get rid of obsolete methods Init() and Final().
+
+	* When SetVersion() is available, specify the version of p42svn.
+
+Version 0.20 2007-07-01  Dimitri Papadopoulos-Orfanos  <dpo@tigris.org>
+
+	* Accept all changes when no range is specififed.
+
+Version 0.19 2007-06-14  Dimitri Papadopoulos-Orfanos  <dpo@tigris.org>
+
+	* Option '--changes' limits the range of dumped  changelists.
+
+	* When adding parent directories, don't add root ("/").
+
+	* Option '--dry-run' -  avoids downloading large files from the
+	  Perforce server. This allows you to quickly preflight to make
+	  sure everything will be successful.
+
+	* Option '--verbose' for verbose output - without the overwhelming
+	  output of '--debug'. 
+
+	* Tolerance for corrupt changelists.
+
+Version 0.18 2007-04-16  Dimitri Papadopoulos-Orfanos  <dpo@tigris.org>
+
+	* Option to override $P4CHARSET and select an alternative charset
+	  for the Subversion dump/load format.
+
+Version 0.17 2006-03-13  Dimitri Papadopoulos-Orfanos  <dpo@tigris.org>
+
+	* Use new function p4_has_text_flag which tests for text/unicode
+	  instead of explicitly testing for text only.
+
+	* Set svn:executable to "on" instead of "1" as it seems more common.
+
+	* Add option to set svn:eol-type for text/unicode Perforce file types.
+
+	* Handle all the Perforce file types listed by 'p4 help filetypes'.
+
+	* Special characters @, #, *, % are now handled by Perforce 2004.2.
+
+	* More support for symlinks, handle edits in addition to adds.
+
+	* Add -w to better detect Perl errors.
+
+Version 0.16 2006-01-23  Ray Miller  <ray@sysdev.oucs.ox.ac.uk>
+
+	* Trim trailing newline from $content when adding a symlink
+
+	* Note tested against P4 version 3.4804 built against 2005.2 of the
+	Perforce API.
+
+	These patches thanks to Dimitri Papadopoulos-Orfanos <dpo@tigris.org>.
+	
+Version 0.15 2006-01-20  Ray Miller  <ray@sysdev.oucs.ox.ac.uk>
+
+	* Improved handling of return from P4::Errors.
+
+	* Added support for symlinks.
+
+	These patches thanks to Dimitri Papadopoulos-Orfanos <dpo@tigris.org>.
+
+Version 0.14 2004/10/20 20:09:46  Ray Miller  <ray@sysdev.oucs.ox.ac.uk>
+
+	* Set binmode on STDOUT to prevent line-end munging under Cygwin's
+	Perl.  Bug reported by Damien McKenna <dmckenna@thelimucompany.com>.
+
+Version 0.13 2003/11/06 11:22:21  Ray Miller  <ray@sysdev.oucs.ox.ac.uk>
+
+	* Fix regular expression in munge_keywords() so that Perl variable
+	names aren't inadvertently caught.
+	
+Version 0.12 2003/09/16 15:49:34  Ray Miller  <ray@sysdev.oucs.ox.ac.uk>
+
+	* Yet more special-casing in p4_get_copyfrom_filerev() to handle
+	strange Perforce branch/integrate operations.
+	
+Version 0.11 2003/09/16 11:42:44  Ray Miller  <ray@sysdev.oucs.ox.ac.uk>
+
+	* More bugfixes to p4_get_copyfrom_filerev(): if return from P4
+	Filelog is not of the expected form (so we can't determine the
+	source of the branch/integrate), return undef.  The calling
+	functions will handle this and treat the branch/integrate as an
+	add/edit instead.
+	
+Version 0.10 2003/09/16 10:11:05  Ray Miller  <ray@sysdev.oucs.ox.ac.uk>
+
+	* Cater for branch/integrate operation where source of
+	branch/integrate is not known to Perforce.  (I guess might happen
+	as the result of a p4 obliterate.)
+
+Version 0.09 2003/09/12 10:25:00  Ray Miller  <ray@sysdev.oucs.ox.ac.uk>
+
+	* Fix bug in svn_change_copy - node action should be "replace",
+	not "change".  Rename function to svn_replace_copy to reflect this.
+	Bug reported by Sebastian Rahtz	<sebastian.rahtz@oucs.ox.ac.uk>.
+
+Version 0.08 2003/09/11 17:18:05  Ray Miller  <ray@sysdev.oucs.ox.ac.uk>
+
+	* Add option to delete empty parent directories.
+
+Version 0.07 2003/09/10 18:51:53  Ray Miller  <ray@sysdev.oucs.ox.ac.uk>
+
+	* Fix bug in p4_get_copyfrom_filerev - order of depot files
+	returned by P4 Filelog is arbitrary, so we have to parse output to
+	determine which depot file was actually the source of the
+	branch/integrate.
+
+	* Update my email address.
+	
+Version 0.06 2003/09/03 16:51:06  Ray Miller  <raym@herald.ox.ac.uk>
+
+	* Fix bug in p4branch2svn - treat as add (rather than copy)
+	when source and destination file contents differ.  This is almost
+	exactly the same problem as was fixed in p4integrate2svn in
+	version 0.04.
+	
+Version 0.05 2003/09/03 15:46:02  Ray Miller  <raym@herald.ox.ac.uk>
+
+	* When the source of a Perforce branch/integrate operation lies
+	outside of the branches being processed, treat as add/edit
+	instead.
+	
+Version 0.04 2003/08/26 09:45:44  Ray Miller  <raym@herald.ox.ac.uk>
+
+	* Fix bug in p4integrate2svn - treat as edit (rather than copy)
+	when source and destination file contents differ.  Bug reported by
+	Garrett Rooney <rooneg@electricjellyfish.net>.
+	
+Version 0.03 2003/08/06 14:13:19  Ray Miller  <raym@herald.ox.ac.uk>
+
+	* Add support for setting svn:mime-type property.
+	
+Version 0.02 2003/08/04 22:17:33  Ray Miller  <raym@herald.ox.ac.uk>
+
+	* Fix bug in p4_get_copyfrom_filerev - we should be taking the
+	first element from the array, not the last.
+
+	* Die when we can't map a depot file to Subversion path - this
+	could happen when depot2svnpath is called with the source of an
+	integrate lying outside a branch being processed.
+
+Version 0.01 2003/08/04 18:47:09  Ray Miller  <raym@herald.ox.ac.uk>
+
+	* Initial release.
+

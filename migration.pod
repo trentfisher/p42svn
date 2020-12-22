@@ -1,0 +1,210 @@
+=pod
+
+=head1 How to Migrate from Perforce to Subversion
+
+This document provides a general guide for how to migrate from
+Perforce to Subversion.  This assumes that a team is actively using
+Perforce and that they want as little downtime as possible.  Therefore
+it is assumed you will use the new L<p42svnsync> script, but you will
+also need to look at the options in L<p42svn.pl> (as it does all the
+heavy lifting).
+
+Here are the usual steps for doing a migration:
+
+=over
+
+=item *
+
+Get access to the server.  The user you use must have full access to all files.
+
+This information will be used for the --port, --user and --password options.
+
+=item *
+
+Check if the server is running in case insensitive mode.  This is
+usually the case with Windows servers, but may also be true if the
+option -C1 is given to p4d.
+
+This will determine what --fix-case option you want to use.  There are
+downsides to every option here.  Pick the one that hurts least.
+
+There are ways to doctor the case mapping after the fact (see below).
+
+=item *
+
+Check what non-ascii character sets may be in use for filenames.
+If you have Windows users, cp1252 is quite likely.
+
+This will be given to --rawcharset option.
+
+If a character is found in an unexpected character set, the character
+will be hex encoded into the file name and errors will be issued.
+
+You could run p42svn.pl with the --dry-run option to more quickly look
+at all filenames for such issues.
+
+=item *
+
+Gather a list of depots.  Determine which ones will be migrated and
+into which repositories.  If the depots are generally standalone, you
+may want each to go to a different Subversion repository, but if there
+is a lot of branching and merging between depots, it may be best to
+keep it all in one.
+
+This will determine the --branch option(s) you will use.
+
+=item *
+
+Determine how to handle labels.  In most cases "--label each" will do
+what you want.
+
+=item *
+
+Consider other options you may want to use: "--save-changenum both" is
+highly recommended, as it helps tracking down issues later on.
+
+=item *
+
+Create Subversion repositories as needed.
+
+=item *
+
+Set up replication with p42svnsync, with all the options you have
+gathered so far.
+
+ p42svnsync init svn-repos --branch //depot/project1=project1
+
+=item *
+
+Run replication.  This can run for a VERY long time (I had one depot
+take two months), so redirect the output:
+
+ p42svnsync sync svn-repos -v > svn-repos 2>&1 &
+
+Note the addition of the "--verbose".  That is always a good idea as
+without it you'll have no idea what is going on.
+
+=item *
+
+Monitor progress.  Be patient. Very, very patient.
+
+=item *
+
+If the process fails, figure out why.  Likely reasons are either that
+permissions were wrong, a file is corrupted (either fix it or add
+--skipcorrupt), a different character set is in use.
+
+You may be able to just add the new options, like so:
+
+ p42svnsync init svn-repos [... options given before ...] --skipcorrupt
+
+Then restart the sync, or, worst case, start over.
+
+Of course, it is quite possible that p42svn may be failing due to
+bugs.  If you suspect this, try to figure out what sequence of actions
+is triggering a bug.  If you can reproduce this in a sample depot,
+that would be fantastically helpful.
+
+=item *
+
+Once the sync is finished, run some verification.  The following would
+provide a very basic level of verification:
+
+ p42svnsync verify svn-repos
+
+It is a good idea to do direct comparisons by checking out selected
+versions/labels/branches from both Subversion and Perforce and run
+diff between them.
+
+=item *
+
+Once you're confident of this, ask engineers to do some verification
+of their own.
+
+=item *
+
+If you want to switch your Subversion "replica" into a production
+repository, you should remove the replication information:
+
+ p42svnsync uninit svn-repos
+
+=item *
+
+Lock up the Perforce depot and tell people to use the Subversion repository.
+
+=item *
+
+???
+
+=item *
+
+Profit!
+
+=back
+
+=head2 Branch by Branch Migration
+
+The above process assumes you are switching over by whole depots.
+If the team wants to migrate branch by branch you should set up the
+--branch options so that changes from Perforce are dropped into a
+single directory.  For example:
+
+ p42svnsync init svn-repos --branch //depot/project1=fromp4 ...
+
+Then ensure that the import directory is protected (via authz or a hook).
+
+Remove the start-commit hook, so people can check into the rest of the
+repository.  The p42svnsync script won't notice that the start-commit
+hook is missing, so future syncs will work.
+
+Once everything has migrated, teams can switch over branch by branch
+by copying the branch from the import directory to the usual
+Subversion location.  For example:
+
+ svn cp http://svn-server.example.com/svn/svn-repos/fromp4/rel-1.0
+        http://svn-server.example.com/svn/svn-repos/branches/rel-1.0
+
+Then development can proceed on the branch just created.  Make sure to
+lock up that branch in Perforce to prevent divergence and/or confusion.
+
+Keep running p42svnsync to keep the "fromp4" directory up to date.
+
+Repeat until all branches have migrated.
+
+=head2 Fixing Case Issues
+
+When Perforce is running in "case insensitive" mode it could be more
+acurately called "case sloppy".  Every checkin can potentially have
+different case, e.g. a file could be called "foo.java", "Foo.java",
+and "FOO.JAVA" at different times (it seems that Perforce takes the
+whatever case combination the user provides at checkin time and puts
+it into the database verbatim).
+
+I suggest using the option "--fix-case map", which will use the
+first-encountered permutation as the filename.  In other words, all
+variations will "map" to the first-encountered permutation.
+Unfortunately, that permutation may not be what you want.  There isn't
+any way to fix this as the migration is going on, but it can be fixed
+after the fact, or even partway through a migration.
+
+First you will have to go through the converted subversion repository
+and identify all files which need their case fixed.  Then you need to
+do a dump and load of the subversion repository renaming those files.
+I wrote a script based on
+http://search.cpan.org/~mscharrer/SVN-Dumpfilter-0.21/lib/SVN/Dumpfilter.pm
+to do the renaming, though I'm sure other tools are out there.  Here is an example (line broken for clarity):
+
+ svnadmin dump -q someprojfromp4 |
+   svndump_rename.pl 's,(.+?/src/proj)/X1,$1/X1,' |
+   svnadmin load -q someprojfromp4.fixcase
+
+If you then run p42svnsync on the resulting repository, the correct
+filename case will be used, since p42svnsync first looks in the
+existing subversion repository to initialize the case map table.
+
+Alternately, you could just do a rename in Subversion after the
+migration.  You would, potentially, need to do this for all branches
+or tags where the case is wrong.  But for isolated cases, it may be
+sufficient.
+
+=cut

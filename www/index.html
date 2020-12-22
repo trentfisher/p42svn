@@ -1,0 +1,51 @@
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />                                                            <html>
+<head>
+ <style type="text/css">
+/* <![CDATA[ */ 
+@import "http://www.tigris.org/branding/css/tigris.css"; 
+@import "http://www.tigris.org/branding/css/inst.css"; 
+/*  ]]> */
+ </style>
+ <link rel="stylesheet" type="text/css" href="http://www.tigris.org/branding/css/print.css" media="print" />
+ <meta name="KEYWORDS" content="Perforce, Subversion, p42svn.pl, p42svn, migration, depot, repository">
+<script src="http://www.tigris.org/branding/scripts/tigris.js" type="text/javascript">
+</script>
+ <title>Project Overview</title>
+</head>
+<body>
+
+<p><strong>p42svn</strong> is a Perl script to migrate revision history from a Perforce depot to a Subversion repository.</p>
+<p>Ray Miller, the original author of p42svn does not have time to maintain the project anymore. It has therefore been moved to <a href="http://p42svn.tigris.org/">tigris.org</a>.</p>
+
+<h3>Latest Release</h3>
+<p><a href="http://p42svn.tigris.org/source/browse/*checkout*/p42svn/tags/0.30/p42svn.pl">p42svn 0.30 is available</a>.</p>
+
+<h3>Requirements</h3>
+<dl>
+<dt>Perl</dt>
+<dd>Since p42svn is a Perl script, it needs <a href="http://www.perl.com/">Perl</a> to run. On Linux and many recent Unix releases, Perl is already installed.</dd>
+<dt>Perforce Perl API</dt>
+<dd>The <a href="http://www.perforce.com/perforce/loadsupp.html#api">Perforce Perl API</a> (P4Perl) is usually not distributed with Perl and needs to be installed separately. Download and follow the instructions in the
+<a href="http://www.perforce.com/perforce/doc.current/user/p4perlnotess.txt">release notes</a>.</dd>
+<dt>Perforce C/C++ API</dt>
+<dd>In order to build the Perforce Perl API, you will also need the <a href="http://www.perforce.com/perforce/loadsupp.html#api">Perforce C/C++ API</a> (P4API).</dd>
+</dl>
+
+<h3>Documentation</h3>
+<p>The HTML documentation for the current stable version has been directly created from the POD documentation embedded in the script using <i>pod2html</i>.</p>
+<ul>
+<li><a href="http://p42svn.tigris.org/source/browse/*checkout*/p42svn/tags/0.30/www/p42svn.html">p42svn</a></li>
+<li><a href="http://p42svn.tigris.org/source/browse/*checkout*/p42svn/tags/0.30/www/p42svnsync.html">p42svnsync</a></li>
+<!-- <li><a href="http://p42svn.tigris.org/source/browse/*checkout*/p42svn/tags/0.30/www/migration.html">Migration Guide</a></li> -->
+</ul>
+
+<h3>Source Code</h3>
+<p>To check out the current source code using <strong>svn</strong>, use the following command. Enter an empty password for user <i>guest</i> (just hit return when prompted):</p>
+<p><code>svn checkout http://p42svn.tigris.org/svn/p42svn/trunk p42svn --username <em>guest</em></code></p>
+<p>You can also browse the repository at <a href="http://p42svn.tigris.org/source/browse/p42svn/">http://p42svn.tigris.org/source/browse/p42svn/</a></b>, which is always available from the "Subversion" link in the menu.
+
+</body>
+</html>
+
+              
+              

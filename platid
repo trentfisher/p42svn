@@ -1,0 +1,20 @@
+#!/usr/bin/perl
+#
+# generate a platform identifier according to the Perforce releases
+#
+
+if ($^O =~ /^MSWin(32|64)/)
+{
+    print "ntx$1\n";
+}
+elsif ($^O eq "linux")
+{
+    my $sys = qx(uname -s); chomp $sys;
+    my $pro = qx(uname -p); chomp $pro;
+    my $ver = qx(uname -r); chomp $ver;
+    $pro =~ s/^i\d86$/x86/;
+    $ver =~ s/^(\d+)\.(\d+).*/$1$2/;
+    print lc($sys).$ver.$pro."\n";
+}
+
+exit 0;

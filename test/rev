@@ -1,0 +1,10 @@
+#!/bin/sh
+
+svn log --xml --with-all-revprops file://`pwd`/$1 | 
+if [ "$2" == "last" ]
+then
+    perl -ne 'if (not $found and m,name="p42svn:changenum">(\d+)</property>,) { print $found=$1; }'
+elif [ "$2" == "next" ]
+then
+    perl -ne 'if (not $found and m,name="p42svn:changenum">(\d+)</property>,) { print $found=$1+1; }'
+fi

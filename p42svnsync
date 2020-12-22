@@ -1,0 +1,784 @@
+#!/bin/env perl
+
+=pod
+
+=head1 NAME
+
+p42svnsync -- Synchronize a Perforce depot to Subversion a la svnsync
+
+=head1 SYNOPSIS
+
+p42svnsync [options] init repository [...p42svn options...]
+p42svnsync [options] info repository
+p42svnsync [options] sync repository [...p42svn options...]
+p42svnsync [options] uninit repository
+
+=head1 DESCRIPTION
+
+This command will continuously synchronize changes from a Perforce depot to a Subversion repository, using p42svn.
+
+The basic operation inspired by C<svnsync> and is thus very similar.
+Unlike svnsync, this must operate on a local repository, so the
+repository must be specified with a pathname not a url.
+
+=head2 Subcommands
+
+=over
+
+=item init repos [...p42svn options...]
+
+Initialize the given subversion repository, by setting revision
+properties on revision 0.  The given p42svn options are saved in one
+of those properties (so you may not want to include --password).
+
+Unlike C<svnsync> this will also place hooks in the repository such
+that revision properties can be set and only the current user can
+commit further changes.
+
+If run on an already initialized repository, the hooks will be
+replaced and the options will be replaced, but the revision number
+will remain as-is.  This permits changing the p42svn options at
+a later date.
+
+=item info repos
+
+Display the syncronization properties on the given repository.
+
+=item sync repos [...p42svn options...]
+
+Get changes from Perforce not yet in the Subversion repository and import them.
+
+Any options given will be combined with the ones set in "init" and will be handed to p42svn.
+This could be useful for the --password option, or, perhaps --label (see bugs)  
+
+=item uninit repos
+
+Disables synchronization: removes the hooks and properties used by this program.
+
+=back
+
+=head2 Options
+
+=over
+
+=item -?, --help
+
+Display command line usage.
+
+=item --man
+
+Display the compleat manual for this program
+
+=item -d, --debug
+
+Enable debugging loquacity.
+
+=item -v, --verbose
+
+Enable verbose output.
+
+=item -n, --numrevs n
+
+Limit the number of revisions to be synchronized to the given number.
+Only meaningful with the "sync" action.
+
+=item --noop
+
+Print out the commands which would be run to do a sync.
+
+=item --dump file
+
+Instead of synchronizing with the Subversion repository, just save the
+dump file to the given filename.  If the file "-" is given, the file
+will be sent to stdout.
+
+=item --retry
+
+Retry potentially incomplete revisions.  See scenarios 3 and 5 in the
+section below.  This used to be the default but the usual cause of a
+crash midway through is often due to a new corner case in the Perforce
+repository causing p42svn to bomb.  In those cases, retrying would
+cause numerous duplicate revisions.
+
+=back
+
+=head2 Out Of Sync Repositories
+
+There are a variety of ways this replication can get out of sync.
+This section details these situations and how this program deals with them.
+Regular checkins are represented by numbers, label revisions (only svn) are
+represented by "x", and "^" indicates
+the revprop indicating what p4 rev was last imported.
+
+Situation 1: all is well, and in sync.
+
+ svn -1-2-3-4-5
+ p4  -1-2-3-4-5
+              ^
+
+Situation 2: all is well, new revs in p4.
+
+ svn -1-2-3-4-5
+ p4  -1-2-3-4-5-6-7
+              ^
+
+Situation 3: import failed.  Last SVN rev (5) could be incomplete so retry it.
+
+ svn -1-2-3-4-5
+ p4  -1-2-3-4-5-6-7
+          ^    
+
+Situation 4: import failed.  Last SVN rev (5) is complete as there is a label rev after it, don't retry.
+
+ svn -1-2-3-4-5-x
+ p4  -1-2-3-4-5-6-7
+          ^    
+
+Situation 5: no revprop -- initial import must have failed.  Reset revprop to p4 revprop on the most recent revision with that property.  Then treat as situation 3.
+ svn -1-2-3-4-5
+ p4  -1-2-3-4-5-6-7
+
+Situation 6: no revprop -- initial import must have failed.  Reset revprop to p4 revprop on the most recent revision with that property.  Then treat as situation 4.
+ svn -1-2-3-4-5-x
+ p4  -1-2-3-4-5-6-7
+
+Situation 7: The revprop indicates a revision which is not in Subversion.  This shouldn't happen unless the repository got reset for some reason (maybe a restore from backup?). I'm not sure this can be automatically detected without major changes.
+ svn -1-2-3-4
+ p4  -1-2-3-4-5-6-7
+                ^
+ 
+=head2 Environment
+
+The usual Perforce environment variables can be used: P4PORT, P4USER and P4PASSWD.
+Only meaningful with the sync command.
+
+=head1 EXAMPLES
+
+ svnadmin create foo
+ p42svnsync init `pwd`/foo --port somehost:1666 --branch //depot=
+ p42svnsync -vn 10 sync `pwd`/foo
+
+=head1 SEE ALSO
+
+L<p42svn>, L<svnsync>
+
+=head1 BUGS
+
+Labels are not included by default... for the same reason --branch is
+not included by default.
+
+Should the progress indicators be split from --verbose?  (the current output would look yucky in a log file)
+
+Won't work on Windows (though most of the trouble is in sethooks())
+
+=cut
+
+use strict;
+use warnings;
+use File::Temp;
+use Getopt::Long;
+use Pod::Usage;
+use FindBin;
+use Cwd;
+
+# last perforce rev successfully imported
+use constant LASTREVPROP => "p42svn:sync-last-merged-rev";
+use constant OPTSPROP => "p42svn:opts";
+use constant P4CHGPROP => "p42svn:changenum";
+use constant P4INCPROP => "p42svn:incomplete";
+use constant LOCKPROP => "p42svn:lock-pid";
+use constant TIMEPROP => "p42svn:sync-duration";
+use constant REQOPTS  => ("--save-changenum", "prop", "--svn-change-prop",P4CHGPROP, "--nopartialrev");
+$|=1;
+my $debug;
+my $verbose;
+my $numrevs;
+my $bufsize = 8192;
+my $noop;
+my $dumpfile;
+my $retryinc;  # retry potentially incomplete revs?
+# command line parsing
+{
+    my $help;
+    my $man;
+    Getopt::Long::Configure ("bundling", "require_order");
+    GetOptions("help|?"        => \$help,
+	       "man"           => \$man,
+	       "d|debug+"      => \$debug,
+	       "v|verbose"     => \$verbose,
+               "n|numrevs=s"   => \$numrevs,
+               "noop|dry-run"  => \$noop,
+               "dump=s"        => \$dumpfile,
+               "retry"         => \$retryinc,
+           )
+	or pod2usage(-exitstatus => 1);
+    pod2usage(-exitstatus => 0) if $help;
+    pod2usage(-exitstatus => 0, -verbose => 2) if $man;
+
+    $verbose = $debug if $debug;  # debug implies verbose
+}
+
+my $cmd = shift @ARGV;
+die "Error: a command must be given: info, init, uninit or sync\n" unless $cmd;
+my $repos = shift @ARGV;
+die "Error: a destination subversion repository must be given\n" unless $repos;
+# make sure repos is absolute directory path
+$repos =~ s,^file:/+,/,;
+$repos = cwd()."/".$repos if $repos !~ m,^/,;
+die "Error: destination subversion repository must be a directory\n" unless -d $repos;
+
+if ($cmd eq "init")
+{
+    sethooks($repos);
+    # if the properties are already present, leave the revision number
+    my ($lastsvnrev) = getprop($repos, LASTREVPROP);
+    setprop($repos, 0, LASTREVPROP, 0) if not defined $lastsvnrev;
+    # go ahead an update the options,regardless
+    setprop($repos, 0, OPTSPROP, @ARGV) if @ARGV;
+}
+elsif ($cmd eq "uninit")
+{
+    print "Disabling replication on $repos\n";
+
+    # remove the properties
+    my $url = $repos;
+    $url = "file://".$url unless $url =~ /^file:/;
+    foreach my $prop (LASTREVPROP, OPTSPROP)
+    {
+        system("svn", "propdel", "-r0", "--revprop", $prop, $url) and
+            warn "Error: unable to remove property $prop from $url\n";
+    }
+
+    # remove the hooks
+    unlink("$repos/hooks/pre-revprop-change") or
+        warn "Error: unable to remove $repos/hooks/pre-revprop-change: $!\n";
+    unlink("$repos/hooks/start-commit") or
+        warn "Error: unable to remove $repos/hooks/start-commit: $!\n";
+
+   exit 0;
+}
+elsif ($cmd eq "verify")
+{
+    my ($lastsvnrev) = getprop($repos, LASTREVPROP);
+    die "Error: Repository $repos is not initialized for synchronization, property ".LASTREVPROP." not found\n"
+        if (not defined $lastsvnrev);
+
+    # get the state of the current svn repos
+    my ($tmpffd, $tmpfile) = File::Temp::tempfile("p42svnsync_files_XXXX",
+                                                  TMPDIR => 1, UNLINK =>1);
+    my ($tmprfd, $tmprevs) = File::Temp::tempfile("p42svnsync_revs_XXXX",
+                                                  TMPDIR => 1, UNLINK =>1);
+
+    print "Gathering current state of repository $repos...\n" if $verbose;
+    system "svnlook tree --full-paths $repos > $tmpfile";
+    system "svn log -v --xml --with-all-revprops file://$repos > $tmprevs";
+
+    my @opts = getprop($repos, OPTSPROP);
+    print "options: @opts\n" if $verbose;
+    my @p42svncmd = (
+        $^X,                         # force it to use the same perl
+        $FindBin::Bin."/p42svn.pl",  # get the one installed in the same place
+        @opts,
+        REQOPTS,
+        "--existing-files", $tmpfile,
+        "--existing-revs", $tmprevs,
+        "--verify",
+        "--changes", "0-$lastsvnrev",
+        @ARGV);
+
+    system @p42svncmd;
+}
+elsif ($cmd eq "info")
+{
+    my ($lastsvnrev) = getprop($repos, LASTREVPROP);
+    die "Error: Repository $repos is not initialized for synchronization, property ".LASTREVPROP." not found\n"
+        if (not defined $lastsvnrev);
+    print "last p4 rev synced: ",($lastsvnrev||"unknown"),"\n";
+    my ($lastp4chg) =  getprophist($repos, P4CHGPROP);
+    print "last p4 rev in log: ",($lastp4chg||"unknown"),"\n";
+    my ($lock) = pidislock($repos);
+    if ($lock > 0)
+    {
+        print "Sync process $lock in progress\n";
+    }
+    elsif ($lock < 0)
+    {
+        print "Sync process ".abs($lock)." is dead\n";
+    }
+    my @opts = getprop($repos, OPTSPROP);
+    print "options: @opts\n";
+    my ($tm) = getprop($repos, TIMEPROP);
+    printf "total sync time: %s\n", hourminsec($tm);
+}
+elsif ($cmd eq "reset")
+{
+    my ($lastp4chg, $lastp4chgrev) =  getprophist($repos, P4CHGPROP);
+
+    print "last p4 rev $lastp4chg in svn rev $lastp4chgrev\n";
+    if (not @ARGV)       {}
+    elsif ($ARGV[0] < 0) { $lastp4chg += $ARGV[0]; }  # negative offset
+    else                 { $lastp4chg = $ARGV[0]; }
+    print "resetting to $lastp4chg\n";
+    
+    setprop($repos, 0, LASTREVPROP, $lastp4chg) or
+        warn "Error: failed to set revprop ".LASTREVPROP." on $repos\n";
+}
+elsif ($cmd eq "sync")
+{
+    my ($lastsvnrev) = getprop($repos, LASTREVPROP);
+    die "Error: Repository $repos is not initialized for synchronization, property ".LASTREVPROP." not found\n"
+        if (not defined $lastsvnrev);
+    my @opts = getprop($repos, OPTSPROP);
+    die "Error: Repository $repos is not initialized for synchronization, property ".OPTSPROP." not found\n"
+        unless @opts;
+    # if the property gets manually edited, there could be blank entries at the end
+    pop @opts while $opts[$#opts] eq "";
+
+    my $latestp4 = getlastp4rev(@opts, @ARGV);
+    print "latest revision in perforce is $latestp4\n" if $debug;
+    if (not defined $latestp4)
+    {
+        die "Error: unable to get latest revision from perforce\n";
+    }
+    elsif ($latestp4 == $lastsvnrev)
+    {
+        print "Repository $repos is up-to-date, rev $latestp4\n";
+        exit 0;
+    }
+
+    # double check that the repository property and the last rev property are the same
+    # in case the last sync got interrupted
+    my ($lastp4chg, $lastp4chgrev) =  getprophist($repos, P4CHGPROP);
+    if (not $lastp4chg)
+    {
+        warn "Warning: svn repository has never been synchronized, starting from zero\n";
+    }
+    elsif ($lastp4chg and $lastp4chg > $lastsvnrev)
+    {
+        warn "Warning: Last perforce revisions out of sync, $lastp4chg vs. $lastsvnrev, reseting to $lastp4chg\n";
+        $lastsvnrev = $lastp4chg;
+
+	# if the svn revision containing the latest p4 rev is not the newest
+	# (e.g. label revs intervene), then it must be complete.  If not,
+	# it is partly completed and we need to try that rev again.
+	my ($latestsvnrev) = qx(svnlook youngest $repos); chomp $latestsvnrev;
+        print "lastp4chgrev = $lastp4chgrev, latestsvnrev = $latestsvnrev\n" if $debug;
+        if ($lastp4chgrev == $latestsvnrev)
+        {
+            setprop($repos, $lastp4chgrev, P4INCPROP, "possibly incomplete sync")
+                or die "Error: failed to set revprop ".P4INCPROP.", bailing out\n";
+            if ($retryinc)
+            {
+                warn "Warning: last revision may be incomplete, retrying p4 rev $lastsvnrev\n";
+                $lastsvnrev--;
+            }
+            else
+            {
+                die "Error: last revision ($lastsvnrev) may be incomplete, bailing out\n";
+            }
+        }
+    }
+
+    # make sure another sync isn't running
+    die "Error: repository $repos has a sync in progress, cannot lock\n"
+        if not $noop and not $dumpfile and not pidlock($repos);
+
+    # get the state of the current svn repos
+    my ($tmpffd, $tmpfile) = File::Temp::tempfile("p42svnsync_files_XXXX",
+                                                  TMPDIR => 1, UNLINK =>1);
+    my ($tmprfd, $tmprevs) = File::Temp::tempfile("p42svnsync_revs_XXXX",
+                                                  TMPDIR => 1, UNLINK =>1);
+
+    # TBD spaces in the repository name could cause trouble!
+    my $cmd = "svnlook tree --full-paths $repos > $tmpfile";
+    if ($noop) { print "$cmd\n"; } else { system($cmd); }
+    $cmd = "svn log --xml --with-all-revprops file://$repos > $tmprevs";
+    if ($noop) { print "$cmd\n"; } else { system($cmd); }
+
+    my @p42svncmd = (
+        $^X,                         # force it to use the same perl
+        $FindBin::Bin."/p42svn.pl",  # get the one installed in the same place
+        @opts,
+        REQOPTS,
+        "--existing-files", $tmpfile,
+        "--existing-revs", $tmprevs,
+        "--changes",
+        ($lastsvnrev+1)."-".$latestp4);
+    push @p42svncmd, "--revlimit", $numrevs if $numrevs;
+    push @p42svncmd, @ARGV;
+    print "from p4: @p42svncmd\n" if $debug or $noop;
+
+    my @svnloadcmd = ("svnadmin", "load", "-q", $repos);
+    print "to svn:  @svnloadcmd\n" if $debug or $noop;
+
+    exit 0 if $noop;
+
+    my $fromp4pid = open(my $fromp4, "-|", @p42svncmd);
+    die "Error: command @p42svncmd failed: $!\n" unless $fromp4pid;
+    binmode($fromp4);
+    my $tosvn;
+    my $tosvnpid;
+    if ($dumpfile and $dumpfile eq "-")
+    {
+        $tosvn = *STDOUT;
+    }
+    elsif ($dumpfile)
+    {
+        open($tosvn, "> ".$dumpfile) or
+            die "Error: unable to write to dump file $dumpfile: $!\n";
+    }
+    else
+    {
+        $tosvnpid = open($tosvn,  "|-", @svnloadcmd);
+        die "Error: command @svnloadcmd failed: $!\n" unless $tosvnpid;
+    }
+    binmode($tosvn);
+
+    # try to shut down gracefully
+    sub closepipes
+    {
+        # kill the load first so we don't get a partial rev
+        kill 1, $tosvnpid if $tosvnpid;
+        kill 1, $fromp4pid;
+        pidunlock($repos);
+    }
+    $SIG{PIPE} = sub {
+        closepipes();
+        die "Error: broken pipe, svnadmin died?\n";
+    };
+    $SIG{INT} = sub {
+        closepipes();
+        die "Error: Interrupt, attempting to die gracefully\n";
+    };
+    $SIG{HUP} = sub {
+        closepipes();
+        die "Error: Hangup, attempting to die gracefully\n";
+    };
+
+
+    my $st = time;
+    my $totlen = 0;
+    my $buf = " "x$bufsize;
+    my $lastbuf = " "x$bufsize;
+    my $currev;
+    while (my $len = sysread($fromp4, $buf, $bufsize))
+    {
+        if (not defined syswrite($tosvn, $buf, $len))
+        {
+            pidunlock($repos);
+            die "Error: write to svnadmin load failed: $!\n";
+        }
+        $totlen += $len;
+        $currev = $1
+            if ($lastbuf.$buf) =~ /\nRevision-number:\s*(\d+)/ or
+               ($lastbuf.$buf) =~ /^Revision-number:\s*(\d+)/;
+        printf("Sync rev %d, %.1f revs/sec, %.1f kb, %.1f kb/sec    \r",
+               $currev, (time==$st ? 0 : $currev/(time-$st)),
+               $totlen/1024, (time==$st ? 0 : ($totlen/1024)/(time-$st))) if $verbose;
+        $lastbuf = $buf;
+    }
+    printf("\nDone.  Sync rev %d, %.1f revs/sec, %.1f kb, %.1f kb/sec    \n",
+           $currev, (time==$st ? 0 : $currev/(time-$st)),
+           $totlen/1024, (time==$st ? 0 : ($totlen/1024)/(time-$st))) if $verbose;
+
+    # close the pipes and check for errors
+    # if the sync failed partway through, we won't know what to set the
+    # last synced rev to... TBD
+    close($fromp4);
+    my $status = $?;
+    close($tosvn);
+    $status += $?;
+    if (not $dumpfile)
+    {
+        if ($status == 0)
+        {
+            # if we were asked to only sync a certain number of revs
+            # we have to find out what that rev was
+            if ($numrevs)
+            {
+                my ($lastp4chg, $lastp4chgrev) =  getprophist($repos, P4CHGPROP);
+                $latestp4 = $lastp4chg;
+            }
+
+            setprop($repos, 0, LASTREVPROP, $latestp4) or
+                warn "Error: failed to set revprop ".LASTREVPROP." on $repos\n";;
+        }
+        # record how much time we spent running
+        my ($tm) = getprop($repos, TIMEPROP); $tm = 0 unless defined $tm;
+        # we'll round up, just in case the update took less than a second
+        # this is probably not an issue beyond the smallest of
+        # depots (like the test cases)
+        my $elapsed = (time-$^T) || 1;
+        setprop($repos, 0, TIMEPROP, $tm+$elapsed) or
+            warn "Error: failed to set revprop ".TIMEPROP." on $repos\n";;
+        ($tm) = getprop($repos, TIMEPROP)||0;
+        pidunlock($repos);
+    }
+}
+else
+{
+    die "Error: unknown command $cmd\n";
+}
+
+exit 0;
+
+#------------------------------------------------------------------------
+# get the given revision property from rev zero
+# NOTE: this returns an array, so don't assign to a scalar, use
+# ($foo) = getprop(...)
+#
+sub getprop
+{
+    my $repos = shift;
+    $repos = "file://".$repos unless $repos =~ /^file:/;
+    my $prop = shift;
+    my $rev = shift || 0;
+    my @out = qx(svn propget -r$rev --revprop $prop $repos);
+    warn "Error: svn propget $prop $repos bad exit status $?\n" if $?;
+    chomp @out;
+    return @out;
+}
+
+#------------------------------------------------------------------------
+# set the given revision property on rev zero
+#
+sub setprop
+{
+    my $repos = shift;
+    $repos = "file://".$repos unless $repos =~ /^file:/;
+    my $rev = shift;
+    my $prop = shift;
+
+    # we use a temporary file for multi-line settings, and to prevent
+    # the shell from messing with things
+    my ($tmpfd, $tmpfile) = File::Temp::tempfile("p42svnsync_XXXX",
+                                                  TMPDIR => 1, UNLINK =>1);
+    print $tmpfd join("\n", @_);
+    close $tmpfd;
+    system("svn", "propset", "-r".$rev, "--revprop", $prop, "--file", $tmpfile, $repos);
+    return $?==0;
+}
+
+#------------------------------------------------------------------------
+# get a revision property from history, via svn log
+#
+sub getprophist
+{
+    my $repos = shift;
+    $repos = "file://".$repos unless $repos =~ /^file:/;
+    my $prop = shift;
+    # we are limiting the number of revs so that svn log won't run too long
+    open(my $l, "-|", "svn", "log", "--limit", 512, "--xml", "--with-all-revprops", $repos)
+        or warn "svn log $repos failed: $!\n";
+    my $rev;
+    my $ret;
+    while(my $f = <$l>)
+    {
+        next if $ret;  # see comment below
+
+	$rev = $1 if $f =~ / revision="(\d+)\">/;
+        if (not $ret and $f =~ m/name="$prop">(\d+)</)
+        {
+            # we could bail out at this point, but we'd get
+            # a broken pipe error on the screen.  As long as we
+            # don't do the pattern match again, it's pretty quick
+            # to read through the output
+            $ret = $1;
+        }
+    }
+    close $l;
+    return ($ret,$rev);
+}
+
+#------------------------------------------------------------------------
+# get the latest revision number from the Perforce repository
+# this information is picked out from the options which will be given
+# to p42svn, otherwise the env vars will be used
+#
+sub getlastp4rev
+{
+    my @opts = @_;
+
+    my $p4opts = "";
+    my $p4server;
+    foreach my $i (0..$#opts)
+    {
+        if ($opts[$i] eq "--port")
+        {
+            $p4opts .= " -p ".$opts[$i+1];
+            $p4server = $opts[$i+1];
+        }
+        elsif ($opts[$i] eq "--user")
+        {
+            $p4opts .= " -u ".$opts[$i+1];
+        }
+        elsif ($opts[$i] eq "--password")
+        {
+            $p4opts .= " -P ".$opts[$i+1];
+        }
+    }
+
+    my @out = qx(p4 $p4opts changes -m1);
+    if (not @out)
+    {
+        warn "Error: unable to get change list from perforce server $p4server\n";
+        return undef;
+    }
+    # TBD error handling?
+    $out[0] =~ m/Change (\d+) on /;
+    return $1;
+}
+
+#------------------------------------------------------------------------
+# place hooks in the repository to permit setting revision properties
+# and to forbid changes except by the current user
+#
+sub sethooks
+{
+    my $repos = shift;
+    $repos =~ s,^file://,,;
+    my $owner = qx(whoami); chomp $owner;
+    die "Error: unable to determine username via whoami\n" unless $owner;
+
+    open(my $h, "> $repos/hooks/pre-revprop-change") or
+        die "unable to write $repos/hooks/pre-revprop-change: $!\n";
+    print $h <<CHUMBA;
+#!/bin/sh
+REPOS=\$1
+USER=\$3
+OWNER=`ls -ld \$REPOS | awk '{print \$3}'`
+if [ "\$USER" = \$OWNER ]; then exit 0; fi
+echo "Replicated repository: Only the \$OWNER user (not \$USER) may change revision properties" >&2
+echo "Replication properties:" >&2
+svn proplist --revprop -r0 -v \$1 >&2
+exit 1
+CHUMBA
+    my $perm = (stat $h)[2] & 07777;
+    chmod($perm | 0111, $h);
+
+    open($h, "> $repos/hooks/start-commit") or
+        die "unable to write $repos/hooks/start-commit: $!\n";
+    print $h <<WAMBA;
+#!/bin/sh
+REPOS=\$1
+USER=\$2
+OWNER=`ls -ld \$REPOS | awk '{print \$3}'`
+if [ \$USER = \$OWNER ]; then exit 0; fi
+echo "Replicated repository: Only the \$OWNER user (not \$USER) may commit new revisions" >&2
+echo "Replication properties:" >&2
+svn proplist --revprop -r0 -v \$1 >&2
+exit 1
+WAMBA
+    $perm = (stat $h)[2] & 07777;
+    chmod($perm | 0111, $h);
+}
+
+#------------------------------------------------------------------------
+# routines for locking so that only one instance runs at a time
+# we will record our pid in a property
+#
+# pidlock(repos) returns true if it can lock the repository for sync
+#
+sub pidlock
+{
+    my $repos = shift;
+
+    my $pid = pidislock($repos);
+    if ($pid > 0)
+    {
+        print "cannot get lock for $repos, pid $pid is still running\n"
+            if $debug;
+        return 0;
+    }
+    elsif ($pid < 0)
+    {
+        $pid = abs($pid);
+        # overrule the dead one
+        warn "Warning: old sync for $repos (pid $pid) is dead, overruling\n";
+    }
+
+    # if we get here we can get the lock
+    # NOTE: there is a potential race condition here, as another process could have
+    # set the lock since we did the propget
+    $repos = "file://".$repos unless $repos =~ /^file:/;
+    if (system("svn", "propset", LOCKPROP, "-r0", "--revprop", $$, $repos))
+    {
+        warn "Error: unable to set ".LOCKPROP." on $repos to lock for sync\n";
+        return 0;
+    }
+        
+    return 1;
+}
+
+# if there is a valid lock, return the pid
+# if the process is dead return the pid as a negative number
+# if there is no lock, return 0
+sub pidislock
+{
+    my $repos = shift;
+    $repos = "file://".$repos unless $repos =~ /^file:/;
+
+    my $prop = LOCKPROP;
+    my @out = qx(svn propget -r0 --revprop $prop $repos);
+    my $pid;
+    if (@out)
+    {
+        my $pid = $out[0]+0;   # force it to numeric
+        return 0 unless $pid>0;
+        # check if the process is running
+        if (kill 0, $pid)
+        {
+            return $pid;
+        }
+        else
+        {
+            # This process is dead, Jim!
+            return -$pid;
+        }
+    }
+    return 0;
+}
+
+# remove the lock
+sub pidunlock
+{
+    my $repos = shift;
+    $repos = "file://".$repos unless $repos =~ /^file:/;
+
+    if (system("svn", "propdel", LOCKPROP, "-r0", "--revprop", $repos))
+    {
+        warn "Error: unable to delete ".LOCKPROP." on $repos to unlock for sync\n";
+        return 0;
+    }
+    return 1;
+}
+
+sub hourminsec
+{
+    my($seconds) = shift || 0;
+    my($days,$hours,$minutes);
+    
+    # if we get a negative number, either something is seriously wrong
+    # or human nature has struck again, and the time subtraction
+    # was done in the wrong order :-)
+    if ($seconds < 0)
+    {
+        warn "internal error: negative time span $seconds,",
+             " using absolute value";
+        $seconds = abs($seconds);
+    }
+
+    $days =  int($seconds  / (24 * 3600));
+    $seconds -= $days * (24 * 3600);
+
+    $hours =  int($seconds / 3600);
+    $seconds -= $hours * 3600;
+
+    $minutes =  int($seconds / 60);
+    $seconds -= $minutes * 60; 
+
+    return sprintf("%d+%02d:%02d:%02d",
+                   $days, $hours, $minutes, $seconds) if $days;
+
+    return sprintf("%02d:%02d:%02d", $hours, $minutes, $seconds);
+}

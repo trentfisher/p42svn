@@ -1,0 +1,273 @@
+SVN-fs-dump-format-version: 1
+
+Revision-number: 1
+Prop-content-length: 112
+Content-length: 112
+
+K 7
+svn:log
+V 10
+test rev 1
+K 10
+svn:author
+V 7
+tfisher
+K 8
+svn:date
+V 27
+TIMESTAMP
+PROPS-END
+
+Node-path: Makefile
+Node-kind: file
+Node-action: add
+Text-content-length: 2979
+Text-content-md5: c6b44041c83556b7dc93ffb88190a886
+Prop-content-length: 10
+Content-length: 2989
+
+PROPS-END
+#
+# Set up and run tests for p42svn
+#
+# this will fetch Perforce binaries, set up a dummy server, and make a bunch
+# changes to the depot
+#
+# TODO:
+# - make work on something other than linux (auto-detect platform?)
+# - should be more robust, should be able to start in the middle
+# - maybe set up an svn repo an run the import?
+#
+VER=r09.2
+PLAT=linux26x86
+ROOT=$(shell pwd)
+P4ROOT=$(ROOT)/p4root
+P4=$(ROOT)/p4
+P4D=$(ROOT)/p4d
+
+# this will do the whole test
+all: setup-depot start setup-client setup-revs export test stop
+	@echo tests successful
+
+#------------------------------------------------------------------------
+# get perforce binaries
+p4:
+	wget ftp://ftp.perforce.com/perforce/$(VER)/bin.$(PLAT)/p4
+	chmod a+x $@
+p4d:
+	wget ftp://ftp.perforce.com/perforce/$(VER)/bin.$(PLAT)/p4d
+	chmod a+x $@
+
+#------------------------------------------------------------------------
+# stop and start the depot
+.PHONY: start stop
+start: $(P4D) $(P4ROOT)
+	@if kill -0 `cat $(P4ROOT)/pid` 2> /dev/null; \
+	then echo P4D already running; \
+	else $(P4D) -r $(P4ROOT) & echo $$! > $(P4ROOT)/pid; sleep 2; \
+	fi
+stop: $(P4)
+	@if kill -0 `cat $(P4ROOT)/pid` 2> /dev/null; \
+	then $(P4) admin stop; sleep 2; \
+	else echo P4D not running; \
+	fi
+restart: stop start
+
+#------------------------------------------------------------------------
+# set up depot
+$(P4ROOT): p4 p4d
+	mkdir -p $(P4ROOT)
+.PHONY: setup-depot
+setup-depot: $(P4ROOT)
+
+#------------------------------------------------------------------------
+# client side setup
+P4PORT=localhost:1666
+export P4PORT
+P4CLIENT=ws
+export P4CLIENT 
+.PHONY: setup-client
+setup-client:
+	mkdir -p $(P4CLIENT)
+	cd $(P4CLIENT) && EDITOR=true $(P4) client
+
+#------------------------------------------------------------------------
+# set up revisions
+setup-revs: r1 r2
+r1:
+	cp Makefile $(P4CLIENT)
+	$(P4) add $(P4CLIENT)/Makefile
+	$(P4) submit -d "test rev 1"
+r2:
+	$(P4) edit $(P4CLIENT)/Makefile
+	echo add stuff >> $(P4CLIENT)/Makefile
+	$(P4) submit -d "test rev 2"
+
+#------------------------------------------------------------------------
+# run exports
+# 
+.PHONY: export
+TESTS=all label
+all.svndump:
+	perl -I.. ../p42svn.pl -v --branch //depot= > $@
+label.svndump:
+	perl -I.. ../p42svn.pl -v --branch //depot= --label ".*=//depot=/tags" > $@
+
+#------------------------------------------------------------------------
+# run tests
+.PHONY: test test-label
+test: $(addsuffix .diff,$(TESTS))
+
+# compare the generated dump file with the expected results
+%.diff: %.svndump %.exp
+# chop out the timestamps so the comparisons are clean...
+# in-place edit is a kludge and prevents these dumps from being loaded
+	perl -i.bak -pe 's/^\d+-\d+-\d+T\d+:\d+:\d+\.\d+Z/TIMESTAMP/' $^
+	diff $^ > $@
+	@echo Test $* is good
+test-label: all.svndump label.svndump
+	diff -q all.svndump label.svndump
+
+#------------------------------------------------------------------------
+# clean up the whole mess
+.PHONY: clean
+clean: stop
+	rm -rf $(P4CLIENT) $(P4ROOT) *.svndump *.diff
+
+
+Revision-number: 2
+Prop-content-length: 112
+Content-length: 112
+
+K 7
+svn:log
+V 10
+test rev 2
+K 10
+svn:author
+V 7
+tfisher
+K 8
+svn:date
+V 27
+TIMESTAMP
+PROPS-END
+
+Node-path: Makefile
+Node-kind: file
+Node-action: change
+Text-content-length: 2989
+Text-content-md5: e68eae682e756fe887a9f591d0de7d0f
+Prop-content-length: 10
+Content-length: 2999
+
+PROPS-END
+#
+# Set up and run tests for p42svn
+#
+# this will fetch Perforce binaries, set up a dummy server, and make a bunch
+# changes to the depot
+#
+# TODO:
+# - make work on something other than linux (auto-detect platform?)
+# - should be more robust, should be able to start in the middle
+# - maybe set up an svn repo an run the import?
+#
+VER=r09.2
+PLAT=linux26x86
+ROOT=$(shell pwd)
+P4ROOT=$(ROOT)/p4root
+P4=$(ROOT)/p4
+P4D=$(ROOT)/p4d
+
+# this will do the whole test
+all: setup-depot start setup-client setup-revs export test stop
+	@echo tests successful
+
+#------------------------------------------------------------------------
+# get perforce binaries
+p4:
+	wget ftp://ftp.perforce.com/perforce/$(VER)/bin.$(PLAT)/p4
+	chmod a+x $@
+p4d:
+	wget ftp://ftp.perforce.com/perforce/$(VER)/bin.$(PLAT)/p4d
+	chmod a+x $@
+
+#------------------------------------------------------------------------
+# stop and start the depot
+.PHONY: start stop
+start: $(P4D) $(P4ROOT)
+	@if kill -0 `cat $(P4ROOT)/pid` 2> /dev/null; \
+	then echo P4D already running; \
+	else $(P4D) -r $(P4ROOT) & echo $$! > $(P4ROOT)/pid; sleep 2; \
+	fi
+stop: $(P4)
+	@if kill -0 `cat $(P4ROOT)/pid` 2> /dev/null; \
+	then $(P4) admin stop; sleep 2; \
+	else echo P4D not running; \
+	fi
+restart: stop start
+
+#------------------------------------------------------------------------
+# set up depot
+$(P4ROOT): p4 p4d
+	mkdir -p $(P4ROOT)
+.PHONY: setup-depot
+setup-depot: $(P4ROOT)
+
+#------------------------------------------------------------------------
+# client side setup
+P4PORT=localhost:1666
+export P4PORT
+P4CLIENT=ws
+export P4CLIENT 
+.PHONY: setup-client
+setup-client:
+	mkdir -p $(P4CLIENT)
+	cd $(P4CLIENT) && EDITOR=true $(P4) client
+
+#------------------------------------------------------------------------
+# set up revisions
+setup-revs: r1 r2
+r1:
+	cp Makefile $(P4CLIENT)
+	$(P4) add $(P4CLIENT)/Makefile
+	$(P4) submit -d "test rev 1"
+r2:
+	$(P4) edit $(P4CLIENT)/Makefile
+	echo add stuff >> $(P4CLIENT)/Makefile
+	$(P4) submit -d "test rev 2"
+
+#------------------------------------------------------------------------
+# run exports
+# 
+.PHONY: export
+TESTS=all label
+all.svndump:
+	perl -I.. ../p42svn.pl -v --branch //depot= > $@
+label.svndump:
+	perl -I.. ../p42svn.pl -v --branch //depot= --label ".*=//depot=/tags" > $@
+
+#------------------------------------------------------------------------
+# run tests
+.PHONY: test test-label
+test: $(addsuffix .diff,$(TESTS))
+
+# compare the generated dump file with the expected results
+%.diff: %.svndump %.exp
+# chop out the timestamps so the comparisons are clean...
+# in-place edit is a kludge and prevents these dumps from being loaded
+	perl -i.bak -pe 's/^\d+-\d+-\d+T\d+:\d+:\d+\.\d+Z/TIMESTAMP/' $^
+	diff $^ > $@
+	@echo Test $* is good
+test-label: all.svndump label.svndump
+	diff -q all.svndump label.svndump
+
+#------------------------------------------------------------------------
+# clean up the whole mess
+.PHONY: clean
+clean: stop
+	rm -rf $(P4CLIENT) $(P4ROOT) *.svndump *.diff
+add stuff
+
+

@@ -1,0 +1,112 @@
+* TASKS
+** BUG Replacing dirs with files and vice versa crashes
+   see http://p42svn.tigris.org/issues/show_bug.cgi?id=8
+   test case checked in:
+   r176 | trentf | 2013-05-21 12:28:59 -0700 (Tue, 21 May 2013) | 1 line
+   r175 | trentf | 2013-05-21 12:28:36 -0700 (Tue, 21 May 2013) | 1 line
+** DONE Timezone handling of checkin dates
+   CLOSED: [2012-03-27 Tue 11:30]
+   - State "DONE"       from ""           [2012-03-27 Tue 11:30]
+   It seems p42svn takes the dates from P4 as utc
+   sample depot
+   Change 12000 by perfmerge++@perfmerge++ on 2011/05/16 15:03:40
+   in dump file:
+   Revision-number: 462
+   2011-05-16T15:03:40.000000Z
+   p4_get_change_details() is where this needs to be adjusted
+   add "utc" to time2str, otherwise it uses local time
+   testcase in timezone.t
+** DONE non utf8 chars in log messages
+   An attempt at this was done in svn_props2string()
+   but I couldn't get the byte counts right
+   Rajesh's patch fixes this
+** DONE case insensitivity in depot names:  //doc vs //Doc
+   CLOSED: [2012-04-11 Wed 10:28]
+   - State "DONE"       from "BUG"        [2012-04-11 Wed 10:28]
+   only an issue on case insensitive servers
+   both labels and branches need to do this
+   Added code in p4_get_label_files() and is_wanted_file()
+   which does case insensitive matches if --fix-case is used
+** DONE case mapping support with --changes
+   CLOSED: [2012-04-11 Wed 10:28]
+   - State "DONE"       from "BUG"        [2012-04-11 Wed 10:28]
+   refactor casemapping code and use it to process the --existing-files list   
+** DONE ETA calculations wrong on incremental imports
+   CLOSED: [2012-12-21 Fri 11:02]
+   - State "DONE"       from "NEXT"       [2012-12-21 Fri 11:02]
+** TODO Improve --verify
+   check files changed in each rev
+   Update:  this has been implemented, but I'm not sure it's 100% right
+   only checks for changes, not file contents... that would be as slow as a migration!
+   should add properties to repository for verified revs
+** TODO Add better statistics
+   count revs, actions, content (+cache)
+** DONE Fix handling of unintelligible characters
+   % escapes was a bad idea
+   Perhaps use the new option to encode which takes a code ref for dealing
+   with bogus chars... but that requires Perl 5.8.8 or newer
+   use an = escape, a la quoted-printable encoding
+** TODO Better die() handling
+   http://p42svn.tigris.org/ds/viewMessage.do?dsMessageId=2918677&dsForumId=4895
+** DONE provide a way to stop p42svn and p42svnsync cleanly
+   CLOSED: [2013-01-02 Wed 12:35]
+   - State "DONE"       from "NEXT"       [2013-01-02 Wed 12:35]
+   p42svn should accept a signal telling it to exit after finishing this rev.
+   Should be done for INT, HUP, ??
+   p42svnsync should pass that signal to p42svn and wait for them to finish.
+   should multiple interupts kill it anyway, or just make them do a kill -9?
+   decided to use a marker file with the PID on it (by default)
+   p42svnsync now tries to deal with INT and HUP by killing svnadmin first.
+** BUG panic: sv_setpvn
+   User report:
+   I had trouble getting past “panic: sv_setpvn called with negative
+   strlen” when it was running the line:
+   “$result = $p4->Run('print',$filename);”,
+   so I simply replaced the line with direct invocation of
+   “p4 print –q $filename” and all seemed fine.
+   
+   Do you have reason to believe that doing so is not identical to doing
+   “Run(‘print’, $filename)” ?
+
+   FYI the below is the related thread that someone else started where I provided my own input:
+   http://forums.perforce.com/index.php?/topic/756-p4perlc-api-issues-with-run/page__gopid__4142#entry4142
+
+** SOMEDAY optimize branch, integrate and label to copy entire tree
+   for example a branch action will list every file in the tree
+   but in svn that can be a copy of the top of the tree
+   Not sure if this is even possible with the data at hand:
+   the branch change list is based on the versions (#) not change numbers (@)
+   So I don't know if there's any way to determine which change a given
+   branch or label is without doing even more queries against P4, which
+   is where the performance suffers.
+** TODO fail on outside scope copies
+   if the origin of a label, branch or integrate is not within scope,
+   it is blindly turned into a copy.
+   however, it is possible that these are signs of bad set of branch specs
+   so, should we issue warnings, or maybe error out given a cmd line option?
+** Test suite
+*** TODO Set up a self contained depot instead of the stock sample file
+    needs to be a case insensitive server
+    check in the checkpointed tar ball
+*** DONE finish converting test cases to perl-based tests
+    CLOSED: [2013-01-02 Wed 15:57]
+    - State "DONE"       from "NEXT"       [2013-01-02 Wed 15:57]
+*** TODO Verify that conversion test is correct
+    that is, changing file types, like link replaced with a dir, &c.
+    Could someone who knows P4 review?
+*** TODO test cases for case insensitivity
+    how to set up test cases, another depot with -C1?
+    or switch existing server?
+*** TODO test cases for weird characters
+    is rawcharset.t sufficient?
+*** TODO test case for integrating from other depots, including removed ones
+*** TODO test case for purge
+*** TODO more test cases for move operations
+    currently the assumption is that move/add and move/delete operations will
+    occur together in a given changeset, and than simply doing the former
+    before the latter will ensure the operations get converted properly.
+    Is this assumption wrong
+*** TODO test cases for labels
+    labels can show delete, move/delete and purge operations.
+    these get excluded at conversion time.
+    the test depot has no such labels... how do they get generated?
