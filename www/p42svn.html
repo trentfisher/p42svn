@@ -1,0 +1,409 @@
+<?xml version="1.0" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>B&lt;p42svn&gt; - dump Perforce repository in Subversion portable dump/load format.</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link rev="made" href="mailto:tfisher@slciahp.us.oracle.com" />
+</head>
+
+<body style="background-color: white">
+
+
+<!-- INDEX BEGIN -->
+<div name="index">
+<p><a name="__index__"></a></p>
+
+<ul>
+
+	<li><a href="#name">NAME</a></li>
+	<li><a href="#synopsis">SYNOPSIS</a></li>
+	<li><a href="#options">OPTIONS</a></li>
+	<li><a href="#description">DESCRIPTION</a></li>
+	<li><a href="#requirements">REQUIREMENTS</a></li>
+	<li><a href="#version">VERSION</a></li>
+	<li><a href="#author">AUTHOR</a></li>
+	<li><a href="#see_also">SEE ALSO</a></li>
+	<li><a href="#bugs">BUGS</a></li>
+	<li><a href="#copyright">COPYRIGHT</a></li>
+</ul>
+
+<hr name="index" />
+</div>
+<!-- INDEX END -->
+
+<p>
+</p>
+<hr />
+<h1><a name="name">NAME</a></h1>
+<p><strong>p42svn</strong> - dump Perforce repository in Subversion portable dump/load format.</p>
+<p>
+</p>
+<hr />
+<h1><a name="synopsis">SYNOPSIS</a></h1>
+<p><strong>p42svn</strong> [<em>options</em>] [<strong>--branch</strong> <em>p4_branch_spec=svn_path</em>] ...</p>
+<p>
+</p>
+<hr />
+<h1><a name="options">OPTIONS</a></h1>
+<dl>
+<dt><strong><a name="help" class="item"><strong>--help</strong></a></strong></dt>
+
+<dd>
+<p>Print detailed help message and exit.</p>
+</dd>
+<dt><strong><a name="usage" class="item"><strong>--usage</strong></a></strong></dt>
+
+<dd>
+<p>Print brief usage message and exit.</p>
+</dd>
+<dt><strong><a name="debug" class="item"><strong>--debug</strong></a></strong></dt>
+
+<dd>
+<p>Print debug messages to STDERR.</p>
+</dd>
+<dt><strong><a name="verbose" class="item"><strong>--verbose</strong></a></strong></dt>
+
+<dd>
+<p>Print status messages to STDERR.</p>
+</dd>
+<dt><strong><a name="version" class="item"><strong>--version</strong></a></strong></dt>
+
+<dd>
+<p>Print out the version of this program, the P4 API, and Perl itself.</p>
+</dd>
+<dt><strong><a name="dry_run" class="item"><strong>--dry-run</strong></a></strong></dt>
+
+<dd>
+<p>Don't actually retrieve file data, but go through the motions. This is
+useful for checking depot validity and for debugging.</p>
+</dd>
+<dt><strong><a name="changes_list" class="item"><strong>--changes</strong> <em>list</em></a></strong></dt>
+
+<dd>
+<p>Specifies which changelists to process.  The list can contain a list of
+numbers and ranges separated by commas, such as 12,39-45,68.</p>
+</dd>
+<dt><strong><a name="revlimit_num" class="item"><strong>--revlimit</strong> <em>num</em></a></strong></dt>
+
+<dd>
+<p>Only convert the given number of revisions.  This is useful when
+doing incremental imports (--changes) of parts of a depot (--branch).
+In that case, saying --changes 32, may convert nothing if change 32
+is not within the scope of the --branch specs.</p>
+</dd>
+<dt><strong><a name="branch_p4_depot_spec_svn_path" class="item"><strong>--branch</strong> <em>p4_depot_spec=svn_path</em></a></strong></dt>
+
+<dd>
+<p>Specify mapping of Perforce branch to repository path.  Takes an
+argument of the form p4_depot_spec=svn_path.  Multiple branch mappings
+may be specified, but at least one is required.</p>
+</dd>
+<dt><strong><a name="label_regexp_p4_depot_spec_svn_path" class="item"><strong>--label</strong> <em>regexp=p4_depot_spec=svn_path</em></a></strong></dt>
+
+<dd>
+<p>Specify mapping of Perforce labels to repository path.  The regexp is
+used to specify which labels to import, &quot;.*&quot; will match all labels.
+The other two parameters are the same as the ones for --branch.</p>
+<p>Alternately the keywords &quot;each&quot; or &quot;all&quot; may be given.  The keyword
+&quot;all&quot; means that labels will be placed in a top level &quot;tags&quot; directory
+for all branch mappings.  The keyword &quot;each&quot; means that labels will be
+placed in a &quot;tags&quot; directory for each branch mapping.</p>
+<p>For example, given the branch options
+ --branch //p1=p1 --branch //p2=p2,
+the option --label each would translate to
+ --label &quot;.*=//p1=/p1/tags&quot; --label &quot;.*=//p2=/p2/tags&quot;
+the option --label all would translate to
+ --label &quot;.*=//p1=/tags/p1&quot; --label &quot;.*=//p2=/tags/p2&quot;</p>
+<p>The keyword &quot;none&quot; may also be given.  This has the effect of canceling out
+all other --label options on the command line.  This is really only useful
+in when this is called from <em>p42svnsync</em>.</p>
+</dd>
+<dt><strong><a name="redolabels_noredolabels" class="item"><strong>--redolabels|--noredolabels</strong></a></strong></dt>
+
+<dd>
+<p>Do/don't redo labels on files which already have already been tagged in SVN.
+The default is to not redo labels.  The only reason to change this is if
+you have labels moving onto different versions of the same files.</p>
+<p>Only meaningful with --label, --changes, --existing-revs and --existing-files
+(in other words, incremental imports).</p>
+</dd>
+<dt><strong><a name="munge_keywords_nomunge_keywords" class="item"><strong>--munge-keywords|--nomunge-keywords</strong></a></strong></dt>
+
+<dd>
+<p>Do/don't convert Perforce keywords to their Subversion equivalent.
+Default is not to perform keyword conversion.</p>
+</dd>
+<dt><strong><a name="convert_eol_noconvert_eol" class="item"><strong>--convert-eol|--noconvert-eol</strong></a></strong></dt>
+
+<dd>
+<p>Do/don't set the svn:eol-style property for Perforce types text/unicode.
+Default is not to set the svn:eol-style property.</p>
+</dd>
+<dt><strong><a name="parse_mime_types_noparse_mime_types" class="item"><strong>--parse-mime-types|--noparse-mime-types</strong></a></strong></dt>
+
+<dd>
+<p>Do/don't attempt to parse content MIME type and add svn:mime-type
+property.  Default is not to parse MIME types.</p>
+</dd>
+<dt><strong><a name="mime_magic_path_path" class="item"><strong>--mime-magic-path</strong> <em>path</em></a></strong></dt>
+
+<dd>
+<p>Specify path of MIME magic file, overriding the default
+<em class="file">/usr/share/file/magic.mime</em>.  Ignored unless <strong>--parse-mime-types</strong>
+is true.</p>
+</dd>
+<dt><strong><a name="delete_empty_dirs_nodelete_empty_dirs" class="item"><strong>--delete-empty-dirs|--nodelete-empty-dirs</strong></a></strong></dt>
+
+<dd>
+<p>Do/don't delete the parent directory when the last file/directory it
+contains is deleted.  Default is to delete empty directories.</p>
+</dd>
+<dt><strong><a name="user_name" class="item"><strong>--user</strong> <em>name</em></a></strong></dt>
+
+<dd>
+<p>Specify Perforce username; this overrides $P4USER, $USER, and
+$USERNAME in the environment.</p>
+</dd>
+<dt><strong><a name="client_name" class="item"><strong>--client</strong> <em>name</em></a></strong></dt>
+
+<dd>
+<p>Specify Perforce client; this overrides $P4CLIENT in the environment
+and the default, the hostname.</p>
+</dd>
+<dt><strong><a name="port_host_port" class="item"><strong>--port</strong> <em>[host:]port</em></a></strong></dt>
+
+<dd>
+<p>Specify Perforce server and port; this overrides $P4PORT in the
+environment and the default, perforce:1666.</p>
+</dd>
+<dt><strong><a name="password_token" class="item"><strong>--password</strong> <em>token</em></a></strong></dt>
+
+<dd>
+<p>Specify Perforce password; this overrides $P4PASSWD in the
+environment.</p>
+</dd>
+<dt><strong><a name="charset_token" class="item"><strong>--charset</strong> <em>token</em></a></strong></dt>
+
+<dd>
+<p>Specify Perforce charset; this overrides $P4CHARSET in the
+environment</p>
+</dd>
+<dt><strong><a name="fix_case_map_uc_lc_ucfirst" class="item"><strong>--fix-case</strong> <em>map|uc|lc|ucfirst</em></a></strong></dt>
+
+<dd>
+<p>If a Perforce repository is hosted on a case-insensitive filesystem
+the depot may return pathnames with varying case.  The parameters
+&quot;uc&quot;, &quot;lc&quot;, and &quot;ucfirst&quot; use the corresponding perl functions to
+transform the case to a consistent name.  The parameter &quot;map&quot; tells
+the converter to map all case variants to the first-encountered
+variant.</p>
+</dd>
+<dt><strong><a name="rawcharset_charset" class="item"><strong>--rawcharset</strong> <em>charset</em></a></strong></dt>
+
+<dd>
+<p>Interpret filenames according to the given character set when
+converting filenames to utf8.  The default is to interpret filenames
+as utf8.  A depot used exclusively by windows machines will likely
+need to specify cp1252 here.</p>
+<p>This may be specified multiple times, and all those character sets will be tried.
+UTF8 will always be tried last.  If the file is not valid in any character set,
+the non-ascii characters will be converted to hex strings.</p>
+<p>Do not change this option between runs using --changes as new files
+with variant filenames will be introduced.</p>
+</dd>
+<dt><strong><a name="contentcache_directory" class="item"><strong>--contentcache</strong> <em>directory</em></a></strong></dt>
+
+<dd>
+<p>Use the given directory as a cache for the contents of each file version.
+The first time you run with this option the file contents will be pulled
+from the Perforce depot and saved in the cache.  On subsequent runs, the
+contents will be pulled from the cache rather than from Perforce.</p>
+<p>This option is useful if the Perforce depot is distant or slow.  It
+can also speed up imports by running through the process several
+times, saving the cache, and then the production migration can be done
+faster.</p>
+</dd>
+<dt><strong><a name="save_changenum_prop_comm" class="item"><strong>--save-changenum</strong> <em>prop,comm</em></a></strong></dt>
+
+<dd>
+<p>Instructs <strong>p42svn</strong> to save the Perforce revision number in the
+subversion dump file either as a property (if given &quot;prop&quot;) or as an
+addendum to the checkin comment (if given &quot;comm&quot;), or both (if given
+&quot;prop,comm&quot; or &quot;both&quot;).</p>
+</dd>
+<dt><strong><a name="svn_change_prop_propname" class="item"><strong>--svn-change-prop</strong> <em>propname</em></a></strong></dt>
+
+<dd>
+<p>Set the svn revision property &lt;propname&gt; to the p4 change number,
+Implies &quot;--save-changenum prop&quot;.  Defaults to &quot;p42svn:changenum&quot;.</p>
+</dd>
+<dt><strong><a name="syncrevs" class="item"><strong>--syncrevs</strong></a></strong></dt>
+
+<dd>
+<p>Add in dummy revisions to ensure the Perforce change numbers and the
+Subversion change numbers match exactly.  Probably only of use in full
+depot conversions.  This will definitely not work in incremental
+imports with labels.</p>
+</dd>
+<dt><strong><a name="existing_files_file" class="item"><strong>--existing-files</strong> <em>file</em></a></strong></dt>
+
+<dd>
+<p>Load a file containing a list of files assumed to already exist 
+in the svn repository (to be used in conjunction with --changes).
+The list can be obtained from svn with the
+command &quot;svnlook tree --full-paths repositorypath&quot;</p>
+</dd>
+<dt><strong><a name="existing_revs_file" class="item"><strong>--existing-revs</strong> <em>file</em></a></strong></dt>
+
+<dd>
+<p>Load a file containing an SVN log for mapping labels and branches to
+their revisions (otherwise file contents will be imported with no
+relatinoship to the previous history).  This assumes that previous
+imports have used &quot;--svn-changenum prop&quot; (otherwise no Perforce
+revision numbers will be found).
+This output is generated with this command:</p>
+<pre>
+ svn log --xml --with-all-revprops &lt;repository-url&gt;</pre>
+<p>This will also cause the revision numbers to start at the next
+available one in the target repository.  There will be trouble if
+there are intervening checkins.</p>
+</dd>
+<dt><strong><a name="skipcorrupt" class="item"><strong>--skipcorrupt</strong></a></strong></dt>
+
+<dd>
+<p>By default if a file's contents cannot be read from the Perforce server,
+the program exits.  This option allows the conversion to continue if
+the error indicates corruption in the depot.  This is useful if there
+is corruption in the depot which cannot be fixed.</p>
+</dd>
+<dt><strong><a name="partialrev_nopartialrev" class="item"><strong>--partialrev|--nopartialrev</strong></a></strong></dt>
+
+<dd>
+<p>If an error occurs while fetching things from Perforce, the dump file
+could be truncated in a way that would not indicate that files are
+missing in that revision.  That is the default behavior, the
+option --nopartialrev will try to prevent this by dumping the error
+messages into the dump file, which should cause svnadmin load to fail
+without completing the in-progress transaction.</p>
+</dd>
+<dt><strong><a name="verify" class="item"><strong>--verify</strong></a></strong></dt>
+
+<dd>
+<p>Just get the change list from Perforce and compare it to what is in a
+subversion repository.  You must specify --existing-revs, and that svn
+log output must have the file changes (i.e. the -v option), and that
+repository must have been generated with the option &quot;--save-changenum
+prop&quot;.</p>
+</dd>
+<dt><strong><a name="stopfile_file" class="item"><strong>--stopfile</strong> <em>file</em></a></strong></dt>
+
+<dd>
+<p>If the given file is found, p42svn will stop at the end of the
+revision/changelist currently being processed.
+If not specified, the file monitored is
+TMPDIR/p42svn.PID, where TMPDIR is the temporary directory returned by
+<a href="/File/Spec/tmpdir.html">the File::Spec::tmpdir manpage</a> and PID is the process id of the p42svn process.</p>
+</dd>
+</dl>
+<p>
+</p>
+<hr />
+<h1><a name="description">DESCRIPTION</a></h1>
+<p><strong>p42svn</strong> connects to a Perforce server and examines changelists
+affecting the specified repository branch(es).  Records reflecting
+each change are written to STDOUT in Subversion portable dump/load
+format.  Each Perforce changelist corresponds to a single Subversion
+revision.  Changelists restricted to files outside the specified
+Perforce branch(es) are ignored.</p>
+<p>Migration of a Perforce depot to Subversion can thus be achieved in
+two easy steps:</p>
+<dl>
+<dt><strong><a name="svnadmin_create_path_to_repository" class="item"><code>svnadmin create /path/to/repository</code></a></strong></dt>
+
+<dt><strong><a name="p42svn_branch_depot_projecta_trunk_projecta_svnadmin_load_path_to_repository" class="item"><code>p42svn --branch //depot/projectA=trunk/projectA | svnadmin load /path/to/repository</code></a></strong></dt>
+
+</dl>
+<p>It is also possible to specify multiple branch mappings to change the
+repository layout when migrating, for example:</p>
+<dl>
+<dt><strong><a name="p42svn_branch_depot_projecta_devel_projecta_trunk_branch_depot_projecta_release_1_0_projecta_tags_release1_0" class="item"><code>p42svn --branch //depot/projectA/devel=projectA/trunk --branch
+//depot/projectA/release-1.0=projectA/tags/release1.0</code></a></strong></dt>
+
+</dl>
+<p>
+</p>
+<hr />
+<h1><a name="requirements">REQUIREMENTS</a></h1>
+<p>This program requires the Perforce Perl API, which is available for
+download from
+&lt;<a href="http://www.perforce.com/perforce/loadsupp.html#api">http://www.perforce.com/perforce/loadsupp.html#api</a>&gt;.</p>
+<p>Version 0.16 has been tested By Ray Miller against version 1.2587 of the P4 module built
+against release 2002.2 of the Perforce API.</p>
+<p>Versions 0.16, 0.17, and 0.18 have been tested by Dimitri Papadopoulos-Orfanos against
+version 3.4804 of the P4 module built against release 2005.2 of the Perforce API.</p>
+<p>Version 0.19 has been tested by Dimitri Papadopoulos-Orfanos against version 3.5708 of
+the P4 module built against release 2006.1 of the Perforce API.</p>
+<p>Version 0.21 has been tested by Dimitri Papadopoulos-Orfanos against version 2008.2 of
+the Perforce Perl API and the Perforce C/C++ API.</p>
+<p>Version 0.30 has been tested by Trent Fisher against version 2010.1 of
+the Perforce Perl API and the Perforce C/C++ API.</p>
+<p>
+</p>
+<hr />
+<h1><a name="version">VERSION</a></h1>
+<p>This is version 0.30.</p>
+<p>
+</p>
+<hr />
+<h1><a name="author">AUTHOR</a></h1>
+<p>Ray Miller &lt;<a href="mailto:ray@sysdev.oucs.ox.ac.uk">ray@sysdev.oucs.ox.ac.uk</a>&gt;,
+Dimitri Papadopoulos-Orfanos,
+and
+Trent Fisher.</p>
+<p>
+</p>
+<hr />
+<h1><a name="see_also">SEE ALSO</a></h1>
+<p>The Subversion dump file format is documented at
+<a href="http://svn.apache.org/repos/asf/subversion/trunk/notes/dump-load-format.txt">http://svn.apache.org/repos/asf/subversion/trunk/notes/dump-load-format.txt</a></p>
+<p>
+</p>
+<hr />
+<h1><a name="bugs">BUGS</a></h1>
+<p>Please report any bugs to the issue tracker
+&lt;<a href="http://p42svn.tigris.org/servlets/ProjectIssues">http://p42svn.tigris.org/servlets/ProjectIssues</a>&gt;.</p>
+<p>Accuracy of determined MIME types is dependent on your system's MIME
+magic data.  This program defaults to using data in
+<em class="file">/usr/share/file/magic.mime</em>.  This location appears to comply with
+the Filesystem Hierarchy Standard (FHS) 2.3, although it may differ
+from system to system in practice.</p>
+<p>The <strong>--changes</strong> option has known bugs unless used with the
+--existing-files and --existing-revs options.  Even then there may be
+subtle bugs remaining.  Also --existing-revs doesn't use a full XML
+parser so if SVN changes their formatting, it could break.</p>
+<p>The ETA calculations do not take into account the number of actions
+being performed each rev.</p>
+<p>The --syncrevs option may be ill-advised and incorrect in some cases.</p>
+<p>
+</p>
+<hr />
+<h1><a name="copyright">COPYRIGHT</a></h1>
+<p>Copyright (C) 2010-2012 Oracle and/or its affiliates.</p>
+<p>Copyright (C) 2006-2009 Commissariat a l'Energie Atomique</p>
+<p>Copyright (C) 2003-2006 University of Oxford</p>
+<p>This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.</p>
+<p>This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.</p>
+<p>You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.</p>
+
+</body>
+
+</html>

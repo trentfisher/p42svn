@@ -1,0 +1,150 @@
+<?xml version="1.0" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>How to Migrate from Perforce to Subversion</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link rev="made" href="mailto:tfisher@slciahp.us.oracle.com" />
+</head>
+
+<body style="background-color: white">
+
+
+<!-- INDEX BEGIN -->
+<div name="index">
+<p><a name="__index__"></a></p>
+
+<ul>
+
+	<li><a href="#how_to_migrate_from_perforce_to_subversion">How to Migrate from Perforce to Subversion</a></li>
+	<ul>
+
+		<li><a href="#branch_by_branch_migration">Branch by Branch Migration</a></li>
+	</ul>
+
+</ul>
+
+<hr name="index" />
+</div>
+<!-- INDEX END -->
+
+<p>
+</p>
+<hr />
+<h1><a name="how_to_migrate_from_perforce_to_subversion">How to Migrate from Perforce to Subversion</a></h1>
+<p>This document provides a general guide for how to migrate from
+Perforce to Subversion.  This assumes that a team is actively using
+Perforce and that they want as little downtime as possible.  Therefore
+it is assumed you will use the new <em>p42svnsync</em> script, but you will
+also need to look at the options in <em>p42svn.pl</em>.</p>
+<ul>
+<li>
+<p>Get access to the server.  The user you use must have full access to all files.</p>
+<p>This information will be used for the --port, --user and --password options.</p>
+</li>
+<li>
+<p>Check if the server is running in case insensitive mode.  This is
+usually the case with Windows servers, but may also be true if the
+option -C1 is given to p4d.</p>
+<p>This will determine what --fix-case option you want to use.  There are
+downsides to every option here.  Pick the one that hurts least.</p>
+</li>
+<li>
+<p>Check what character sets may be in use for filenames.  If you have
+Windows users, cp1252 is quite likely.</p>
+<p>This will be given to --rawcharset option.</p>
+</li>
+<li>
+<p>Gather a list of depots.  Determine which ones will be migrated and
+into which repositories.  If the depots are generally standalone, you
+may want each to go to a different Subversion repository, but if there
+is a lot of branching and merging between depots, it may be best to
+keep it all in one.</p>
+<p>This will determine the --branch option(s) you will use.</p>
+</li>
+<li>
+<p>Consider other options you may want to use: --save-changenum both is
+highly recommended.</p>
+</li>
+<li>
+<p>Create Subversion repositories as needed.</p>
+</li>
+<li>
+<p>Set up replication with p42svnsync, with all the options you have
+gathered so far.</p>
+<pre>
+ p42svnsync init svn-repos --branch //depot/project1=project1</pre>
+</li>
+<li>
+<p>Run replication.  This can run for a VERY long time (I had one depot
+take two months), so redirect the output</p>
+<pre>
+ p42svnsync sync svn-repos -v &gt; svn-repos 2&gt;&amp;1 &amp;</pre>
+</li>
+<li>
+<p>Monitor progress.  Be patient, very, very patient.</p>
+</li>
+<li>
+<p>If the process fails, figure out why.  Likely reasons are either that
+permissions were wrong, a file is corrupted (either fix it or add
+--skipcorrupt), a different character set is in use.</p>
+<p>You may be able to just add the new options, like so:</p>
+<pre>
+ p42svnsync init svn-repos [... options given before ...] --skipcorrupt
+ 
+Then restart the sync, or, worst case, start over.</pre>
+</li>
+<li>
+<p>Once the sync is finished, run some verification.  The following would
+provide a very basic level of verification:</p>
+<pre>
+ p42svnsync verify svn-repos</pre>
+<p>It is a good idea to do direct comparisons by checking out selected
+versions/labels/branches from both Subversion and Perforce and run
+diff between them.</p>
+</li>
+<li>
+<p>Once you're confident of this, ask engineers to do some verification
+of their own.</p>
+</li>
+<li>
+<p>If you want to switch your Subversion &quot;replica&quot; into a production
+repository, you should remove the replication information:</p>
+<pre>
+ p42svnsync uninit svn-repos</pre>
+</li>
+<li>
+<p>Lock up the Perforce depot and tell people to use the Subversion repository.</p>
+</li>
+<li>
+<p>???</p>
+</li>
+<li>
+<p>Profit!</p>
+</li>
+</ul>
+<p>
+</p>
+<h2><a name="branch_by_branch_migration">Branch by Branch Migration</a></h2>
+<p>The above process assumes you are switching over by whole depots.
+If the team wants to migrate branch by branch you should set up the
+--branch options so that changes from Perforce are dropped into a
+single directory.  For example:</p>
+<pre>
+ p42svnsync init svn-repos --branch //depot/project1=fromp4 ...</pre>
+<p>Then ensure that the import directory is protected (via authz or a hook).</p>
+<p>Remove the start-commit hook, so people can check into the rest of the
+repository.</p>
+<p>Once everything has migrated, teams can switch over branch by branch
+by copying the branch from the import directory to the usual
+Subversion location.  For example:</p>
+<pre>
+ svn cp <a href="http://svn-server.example.com/svn/svn-repos/fromp4/rel-1.0">http://svn-server.example.com/svn/svn-repos/fromp4/rel-1.0</a>
+        <a href="http://svn-server.example.com/svn/svn-repos/branches/rel-1.0">http://svn-server.example.com/svn/svn-repos/branches/rel-1.0</a></pre>
+<p>Then development can proceed on the branch just created.  Make sure to
+lock up that branch in Perforce to prevent confusion.</p>
+<p>Repeat until all branches have migrated.</p>
+
+</body>
+
+</html>

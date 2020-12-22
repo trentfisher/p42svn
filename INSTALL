@@ -1,0 +1,28 @@
+Installation Instructions
+-------------------------
+
+Requirements:
+
+* Perl -- most Unix/Linux systems should have this already, otherwise,
+  go to http://www.perl.com/
+
+* Perforce Perl API
+  You can find this at http://www.perforce.com/perforce/loadsupp.html#api.
+  Instructions at
+  http://www.perforce.com/perforce/doc.current/user/p4perlnotess.txt
+
+* Perforce C/C++ API
+  In order to build the Perforce Perl API, you will also need this.
+  See http://www.perforce.com/perforce/loadsupp.html#api
+
+The "install" target in the makefile should install the latter two
+items and the p42svn scripts.
+* The variable PREFIX controls where to install the p42svn
+  scripts (the p4perl api will get installed with perl).
+* The variable P4VER controls what version of the P4 api to
+build against, it must match the directory name on the Perforce ftp
+site.  For example:
+
+ make install PREFIX=/scratch P4VER=r12.4
+
+If anybody wants to contribute instructions for Windows, that would be helpful.

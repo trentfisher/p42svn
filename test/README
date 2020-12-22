@@ -1,0 +1,22 @@
+This is the test suite for p42svn.
+
+Everything is driven by the Makefile, which requires GNU Make, and
+there are some hardwired Linux bits in there (for now).
+
+Initially, everything, even test cases, were simply encoded in the Makefile.
+This was too arcane and didn't produce a nice test summary.  So, new tests
+are being written in Perl using the Test module, and then the make target
+"ptest" uses Perl and Test::Harness to run all the tests.  Eventually, all
+tests will be rewritten into Perl, and all that will be left in the Makefile
+are the bits to set up the sample depot.
+
+The makefile will fetch p4, p4d and the sample depot from Perforce,
+and start up a server on the default port (1666) if you want a
+different port redefine PORTNUM on the command line (every time you
+call make).
+
+If you want a command line with env vars set for the test depot,
+run "make shell" (after the depot has been set up, of course).
+
+I am certain this test suite only scratches at the surface of what needs
+testing, but it's a start.
