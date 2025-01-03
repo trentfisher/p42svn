@@ -1876,7 +1876,7 @@ while ($change_idx <= $#changes or $label_idx <= $#labels)
     }
 
     # first check if any labels need to be created
-    if ($labels[$label_idx]->{'Update'} < $details->{'time'}) {
+    if (exists($labels[$label_idx]) and $labels[$label_idx]->{'Update'} < $details->{'time'}) {
         my $label = $labels[$label_idx];
 
         if ($options{'verify'}) {
